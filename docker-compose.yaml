@@ -1,6 +1,7 @@
 version: '3'
 
 services:
+
   zookeeper:
       image: confluentinc/cp-zookeeper:7.4.0
       hostname: zookeeper
@@ -75,6 +76,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+  
   control-center:
     image: confluentinc/cp-enterprise-control-center:7.4.0
     hostname: control-center
@@ -102,6 +104,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+  
   postgres:
     image: postgres:14.0
     environment:
@@ -114,24 +117,25 @@ services:
         max-file: "3"
     networks:
       - confluent
+  
   webserver:
     image: apache/airflow:2.6.0-python3.9
     command: webserver
-    entrypoint: ['/opt/airflow/script/entrypoint.sh']
+    entrypoint: ['/bin/bash','/opt/airflow/script/entrypoint.sh']
     depends_on:
       - postgres
     environment:
       - LOAD_EX=n
       - EXECUTOR=Sequential
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
-      - AIRFLOW_WEBSERVER_SECRET_KEY=this_is_a_very_secured_key
+      - AIRFLOW_WEBSERVER_SECRET_KEY=SecretKey
     logging:
       options:
         max-size: 10m
         max-file: "3"
     volumes:
       - ./dags:/opt/airflow/dags
-      - ./scripts/entrypoint.sh:/opt/airflow/script/entrypoint.sh
+      - ./script/entrypoint.sh:/opt/airflow/script/entrypoint.sh
       - ./requirements.txt:/opt/airflow/requirements.txt
     ports:
       - "8080:8080"
@@ -142,6 +146,7 @@ services:
       retries: 3
     networks:
       - confluent
+
   scheduler:
     image: apache/airflow:2.6.0-python3.9
     depends_on:
@@ -155,8 +160,43 @@ services:
       - LOAD_EX=n
       - EXECUTOR=Sequential
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
-      - AIRFLOW_WEBSERVER_SECRET_KEY=this_is_a_very_secured_key
+      - AIRFLOW_WEBSERVER_SECRET_KEY=SecretKey
     command: bash -c "pip install -r ./requirements.txt && airflow db upgrade && airflow scheduler"
+    networks:
+      - confluent
+
+  spark-master:
+    image: bitnami/spark:latest
+    command: bin/spark-class org.apache.spark.deploy.master.Master
+    ports:
+      - "9090:8080"
+      - "7077:7077"
+    networks:
+      - confluent
+  spark-worker:
+    image: bitnami/spark:latest
+    command: bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    depends_on:
+      - spark-master
+    environment:
+      SPARK_MODE: worker
+      SPARK_WORKER_CORES: 2
+      SPARK_WORKER_MEMORY: 1g
+      SPARK_MASTER_URL: spark://spark-master:7077
+    networks:
+      - confluent
+
+  cassandra_db:
+    image: cassandra:latest
+    container_name: cassandra
+    hostname: cassandra
+    ports:
+      - "9042:9042"
+    environment:
+      - MAX_HEAP_SIZE=512M
+      - HEAP_NEWSIZE=100M
+      - CASSANDRA_USERNAME=cassandra
+      - CASSANDRA_PASSWORD=cassandra
     networks:
       - confluent
 networks:

@@ -1,4 +1,4 @@
-apache-airflow==2.7.3
+apache-airflow==2.7.0
 kafka_python==2.0.2
 yfinance==0.2.32
 PyMySQL==1.1.0
